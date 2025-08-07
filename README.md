@@ -246,8 +246,17 @@ Make sure Gemini CLI is installed and configured on your n8n server:
 gemini --version  # Should show the version
 ```
 
-### 2. **Set Up Authentication**
-Set your API key as an environment variable:
+### 2. **Set Up Authentication (Recommended: Use n8n Interface)**
+
+**Recommended Method**: Provide the API key directly in the n8n interface when configuring the Gemini CLI node. This is the most secure approach as it:
+- Keeps your API key secure within your n8n workflow
+- Allows different workflows to use different API keys
+- Provides better security by not storing keys in environment variables
+- Makes key management easier through the n8n interface
+
+Simply enter your Gemini API key in the node's configuration panel when setting up your workflow.
+
+**Alternative Method**: Set environment variables (less secure):
 ```bash
 # For Gemini API
 export GEMINI_API_KEY="your-api-key-here"

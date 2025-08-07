@@ -30,6 +30,42 @@ interface GeminiResponse {
 	error?: string;
 }
 
+interface McpServer {
+	name: string;
+	connectionType: 'command' | 'http';
+	command?: string;
+	args?: string;
+	httpUrl?: string;
+	env?: string;
+	cwd?: string;
+	timeout: number;
+	trust: boolean;
+	includeTools?: string;
+	excludeTools?: string;
+}
+
+interface ToolsConfig {
+	enabledTools?: string[];
+	securityMode?: 'safe' | 'yolo' | 'sandbox';
+	checkpointing?: boolean;
+}
+
+interface GeminiServerConfig {
+	command?: string;
+	args?: string[];
+	url?: string;
+	env?: Record<string, string>;
+	cwd?: string;
+	timeout?: number;
+	trust?: boolean;
+	includeTools?: string[];
+	excludeTools?: string[];
+}
+
+interface GeminiSettings {
+	mcpServers?: Record<string, GeminiServerConfig>;
+}
+
 export class GeminiCli implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Gemini CLI',
@@ -194,6 +230,228 @@ export class GeminiCli implements INodeType {
 					},
 				],
 			},
+			{
+				displayName: 'Tools Configuration',
+				name: 'toolsConfig',
+				type: 'collection',
+				placeholder: 'Configure Tools',
+				default: {},
+				description: 'Configure built-in tools and external integrations',
+				options: [
+					{
+						displayName: 'Enable Built-in Tools',
+						name: 'enabledTools',
+						type: 'multiOptions',
+						options: [
+							{
+								name: 'File System (Read/Write)',
+								value: 'filesystem',
+								description: 'Enable reading and writing files in the project directory',
+							},
+							{
+								name: 'Shell Commands',
+								value: 'shell',
+								description: 'Allow execution of shell commands (use with caution)',
+							},
+							{
+								name: 'Web Fetch',
+								value: 'web_fetch',
+								description: 'Enable fetching content from URLs',
+							},
+							{
+								name: 'Web Search',
+								value: 'web_search',
+								description: 'Enable web search capabilities',
+							},
+						],
+						default: ['web_fetch', 'web_search'],
+						description: 'Select which built-in tools to enable for Gemini CLI',
+					},
+					{
+						displayName: 'Security Mode',
+						name: 'securityMode',
+						type: 'options',
+						options: [
+							{
+								name: 'Safe Mode (Confirmations Required)',
+								value: 'safe',
+								description: 'Require confirmation for destructive operations (recommended)',
+							},
+							{
+								name: 'Auto-Approve (YOLO Mode)',
+								value: 'yolo',
+								description: 'Automatically approve all tool operations (use with extreme caution)',
+							},
+							{
+								name: 'Sandbox Mode',
+								value: 'sandbox',
+								description: 'Run in sandbox environment with restricted access',
+							},
+						],
+						default: 'safe',
+						description: 'Choose security level for tool operations',
+					},
+					{
+						displayName: 'Enable Checkpointing',
+						name: 'checkpointing',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to enable session checkpointing to save conversation state',
+					},
+				],
+			},
+			{
+				displayName: 'MCP Servers',
+				name: 'mcpServers',
+				type: 'fixedCollection',
+				placeholder: 'Add MCP Server',
+				default: { servers: [] },
+				description: 'Configure external MCP (Model Context Protocol) servers for extended functionality',
+				typeOptions: {
+					multipleValues: true,
+				},
+				options: [
+					{
+						displayName: 'Servers',
+						name: 'servers',
+						values: [
+							{
+								displayName: 'Command',
+								name: 'command',
+								type: 'string',
+								default: '',
+								description: 'Command to execute the MCP server',
+								placeholder: 'npx @modelcontextprotocol/server-github',
+								displayOptions: {
+									show: {
+										connectionType: ['command'],
+									},
+								},
+							},
+							{
+								displayName: 'Command Arguments',
+								name: 'args',
+								type: 'string',
+								default: '',
+								description: 'Command arguments (space-separated)',
+								placeholder: '--port 3000 --verbose',
+								displayOptions: {
+									show: {
+										connectionType: ['command'],
+									},
+								},
+							},
+							{
+								displayName: 'Connection Type',
+								name: 'connectionType',
+								type: 'options',
+								options: [
+									{
+										name: 'Command (Stdio)',
+										value: 'command',
+										description: 'Connect via command execution with stdio transport',
+									},
+									{
+										name: 'HTTP URL',
+										value: 'http',
+										description: 'Connect via HTTP with Server-Sent Events',
+									},
+								],
+								default: 'command',
+								description: 'How to connect to the MCP server',
+							},
+							{
+								displayName: 'Environment Variables',
+								name: 'env',
+								type: 'string',
+								default: '',
+								description: 'Environment variables in KEY=VALUE format (one per line)',
+								typeOptions: {
+									rows: 3,
+								},
+								placeholder: 'GITHUB_PERSONAL_ACCESS_TOKEN=your_token\nAPI_BASE_URL=https://api.example.com',
+							},
+							{
+								displayName: 'Exclude Tools',
+								name: 'excludeTools',
+								type: 'string',
+								default: '',
+								description: 'Comma-separated list of tools to exclude (blacklist, takes precedence)',
+								placeholder: 'delete_file,format_disk',
+							},
+							{
+								displayName: 'HTTP URL',
+								name: 'httpUrl',
+								type: 'string',
+								default: '',
+								description: 'HTTP URL for the MCP server',
+								placeholder: 'http://localhost:3000/sse',
+								displayOptions: {
+									show: {
+										connectionType: ['http'],
+									},
+								},
+							},
+							{
+								displayName: 'Include Tools',
+								name: 'includeTools',
+								type: 'string',
+								default: '',
+								description: 'Comma-separated list of tools to include (whitelist)',
+								placeholder: 'read_file,write_file,list_files',
+							},
+							{
+								displayName: 'Server Name',
+								name: 'name',
+								type: 'string',
+								default: '',
+								required: true,
+								description: 'Unique name for this MCP server',
+								placeholder: 'github-server',
+							},
+							{
+								displayName: 'Timeout (Ms)',
+								name: 'timeout',
+								type: 'number',
+								default: 30000,
+								description: 'Request timeout in milliseconds',
+							},
+							{
+								displayName: 'Trust Level',
+								name: 'trust',
+								type: 'options',
+								options: [
+									{
+										name: 'Require Confirmations',
+										value: false,
+										description: 'Require user confirmation for tool calls (recommended)',
+									},
+									{
+										name: 'Auto-Trust',
+										value: true,
+										description: 'Automatically trust and execute tool calls (use with caution)',
+									},
+								],
+								default: false,
+								description: 'Whether to automatically trust and execute this server\'s tool calls',
+							},
+							{
+								displayName: 'Working Directory',
+								name: 'cwd',
+								type: 'string',
+								default: '',
+								description: 'Working directory for the server command',
+								placeholder: '/path/to/server',
+								displayOptions: {
+									show: {
+										connectionType: ['command'],
+									},
+								},
+							},
+						],
+					},
+				],
+			},
 		],
 	};
 
@@ -263,6 +521,127 @@ export class GeminiCli implements INodeType {
 		}
 	}
 
+	private static async createGeminiConfig(
+		mcpServers: { servers: McpServer[] } | undefined,
+		workingDirectory: string,
+		debug: boolean = false,
+	): Promise<{ configDir: string; settingsPath: string }> {
+		const configDir = path.join(workingDirectory, '.gemini');
+		const settingsPath = path.join(configDir, 'settings.json');
+
+		if (debug) {
+			console.log(`[GeminiCli] Creating config directory: ${configDir}`);
+		}
+
+		// Create .gemini directory
+		try {
+			await fs.mkdir(configDir, { recursive: true });
+		} catch (error) {
+			throw new NodeOperationError(
+				{} as any,
+				`Failed to create config directory: ${error instanceof Error ? error.message : 'Unknown error'}`,
+			);
+		}
+
+		// Generate settings.json content
+		const settings: GeminiSettings = {};
+
+		if (mcpServers?.servers && mcpServers.servers.length > 0) {
+			settings.mcpServers = {};
+
+			for (const server of mcpServers.servers) {
+				if (!server.name || server.name.trim() === '') {
+					continue; // Skip servers without names
+				}
+
+				const serverConfig: GeminiServerConfig = {
+					timeout: server.timeout || 30000,
+					trust: server.trust || false,
+				};
+
+				// Handle connection type
+				if (server.connectionType === 'command' && server.command) {
+					serverConfig.command = server.command;
+					
+					// Parse arguments
+					if (server.args && server.args.trim()) {
+						serverConfig.args = server.args.trim().split(/\s+/);
+					}
+
+					if (server.cwd && server.cwd.trim()) {
+						serverConfig.cwd = server.cwd.trim();
+					}
+				} else if (server.connectionType === 'http' && server.httpUrl) {
+					serverConfig.url = server.httpUrl;
+				}
+
+				// Parse environment variables
+				if (server.env && server.env.trim()) {
+					serverConfig.env = {};
+					const envLines = server.env.split('\n');
+					for (const line of envLines) {
+						const trimmed = line.trim();
+						if (trimmed && trimmed.includes('=')) {
+							const [key, ...valueParts] = trimmed.split('=');
+							const value = valueParts.join('=');
+							serverConfig.env[key.trim()] = value.trim();
+						}
+					}
+				}
+
+				// Handle tool filtering
+				if (server.includeTools && server.includeTools.trim()) {
+					serverConfig.includeTools = server.includeTools
+						.split(',')
+						.map(t => t.trim())
+						.filter(t => t.length > 0);
+				}
+
+				if (server.excludeTools && server.excludeTools.trim()) {
+					serverConfig.excludeTools = server.excludeTools
+						.split(',')
+						.map(t => t.trim())
+						.filter(t => t.length > 0);
+				}
+
+				settings.mcpServers[server.name.trim()] = serverConfig;
+			}
+		}
+
+		// Write settings file
+		try {
+			await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+			
+			if (debug) {
+				console.log(`[GeminiCli] Created settings file: ${settingsPath}`);
+				console.log(`[GeminiCli] Settings content:`, JSON.stringify(settings, null, 2));
+			}
+		} catch (error) {
+			throw new NodeOperationError(
+				{} as any,
+				`Failed to write settings file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+			);
+		}
+
+		return { configDir, settingsPath };
+	}
+
+	private static async cleanupGeminiConfig(configDir: string, debug: boolean = false): Promise<void> {
+		try {
+			if (debug) {
+				console.log(`[GeminiCli] Cleaning up config directory: ${configDir}`);
+			}
+
+			// Remove the entire .gemini directory
+			await fs.rm(configDir, { recursive: true, force: true });
+		} catch (error) {
+			if (debug) {
+				console.warn(`[GeminiCli] Failed to cleanup config directory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			}
+			// Don't throw error for cleanup failures
+		}
+	}
+
 	private static async validateProjectPath(
 		projectPath: string,
 		debug: boolean = false,
@@ -319,60 +698,109 @@ export class GeminiCli implements INodeType {
 			systemPrompt?: string;
 			timeout?: number;
 			debug?: boolean;
+			toolsConfig?: ToolsConfig;
+			mcpServers?: { servers: McpServer[] };
 		},
 	): Promise<GeminiResponse> {
-		return new Promise((resolve, reject) => {
+		return new Promise(async (resolve, reject) => {
 			const messages: GeminiMessage[] = [];
 			const startTime = Date.now();
 			let fullResponse = '';
+			let configDir: string | undefined;
 
-			// Set up environment
-			const env = { ...process.env };
-			if (options.apiKey) {
-				env.GEMINI_API_KEY = options.apiKey;
-			}
-			if (options.useVertexAI) {
-				env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
+			try {
+				// Set up environment
+				const env = { ...process.env };
 				if (options.apiKey) {
-					env.GOOGLE_API_KEY = options.apiKey;
+					env.GEMINI_API_KEY = options.apiKey;
 				}
-			}
+				if (options.useVertexAI) {
+					env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
+					if (options.apiKey) {
+						env.GOOGLE_API_KEY = options.apiKey;
+					}
+				}
 
-			// Build command arguments
-			const args: string[] = [];
-			
-			// Add model parameter
-			if (options.model) {
-				args.push('--model', options.model);
-			}
-			
-			// Add system prompt if provided
-			let finalPrompt = prompt;
-			if (options.systemPrompt) {
-				finalPrompt = `${options.systemPrompt}\n\n${prompt}`;
-			}
+				// Set up configuration directory for MCP servers
+				const workingDirectory = options.cwd || process.cwd();
+				if (options.mcpServers?.servers && options.mcpServers.servers.length > 0) {
+					const configResult = await GeminiCli.createGeminiConfig(
+						options.mcpServers,
+						workingDirectory,
+						options.debug,
+					);
+					configDir = configResult.configDir;
+				}
 
-			if (options.debug) {
-				console.log(`[GeminiCli] Starting Gemini CLI with prompt: ${finalPrompt.substring(0, 200)}...`);
-				console.log(`[GeminiCli] Working directory: ${options.cwd || 'default'}`);
-				console.log(`[GeminiCli] Model: ${options.model || 'default'}`);
-			}
+				// Build command arguments
+				const args: string[] = [];
+				
+				// Add model parameter
+				if (options.model) {
+					args.push('--model', options.model);
+				}
 
-			// Add the prompt as the final argument
-			args.push(finalPrompt);
+				// Add security mode arguments
+				if (options.toolsConfig?.securityMode) {
+					switch (options.toolsConfig.securityMode) {
+						case 'yolo':
+							args.push('--yolomode');
+							break;
+						case 'sandbox':
+							args.push('--sandbox');
+							break;
+						// 'safe' is the default, no additional args needed
+					}
+				}
 
-			// Spawn the gemini CLI process
-			const geminiProcess = spawn('gemini', args, {
-				cwd: options.cwd,
-				env,
-				stdio: ['pipe', 'pipe', 'pipe'],
-			});
+				// Add checkpointing if enabled
+				if (options.toolsConfig?.checkpointing) {
+					args.push('-c');
+				}
 
-			// Set up timeout
-			const timeoutId = setTimeout(() => {
-				geminiProcess.kill('SIGTERM');
-				reject(new Error(`Gemini CLI timed out after ${options.timeout || 300} seconds`));
-			}, (options.timeout || 300) * 1000);
+				// Add debug mode if enabled
+				if (options.debug) {
+					args.push('--debug');
+				}
+				
+				// Add system prompt if provided
+				let finalPrompt = prompt;
+				if (options.systemPrompt) {
+					finalPrompt = `${options.systemPrompt}\n\n${prompt}`;
+				}
+
+				if (options.debug) {
+					console.log(`[GeminiCli] Starting Gemini CLI with prompt: ${finalPrompt.substring(0, 200)}...`);
+					console.log(`[GeminiCli] Working directory: ${workingDirectory}`);
+					console.log(`[GeminiCli] Model: ${options.model || 'default'}`);
+					console.log(`[GeminiCli] Tools config:`, options.toolsConfig);
+					console.log(`[GeminiCli] Command args:`, args);
+					if (configDir) {
+						console.log(`[GeminiCli] Config directory: ${configDir}`);
+					}
+				}
+
+				// Add the prompt as the final argument
+				args.push(finalPrompt);
+
+				// Spawn the gemini CLI process
+				const geminiProcess = spawn('gemini', args, {
+					cwd: workingDirectory,
+					env,
+					stdio: ['pipe', 'pipe', 'pipe'],
+				});
+
+				// Set up timeout
+				const timeoutId = setTimeout(async () => {
+					geminiProcess.kill('SIGTERM');
+					
+					// Cleanup configuration directory
+					if (configDir) {
+						await GeminiCli.cleanupGeminiConfig(configDir, options.debug);
+					}
+					
+					reject(new Error(`Gemini CLI timed out after ${options.timeout || 300} seconds`));
+				}, (options.timeout || 300) * 1000);
 
 			// Handle stdout (main response)
 			geminiProcess.stdout.on('data', (data: Buffer) => {
@@ -405,9 +833,14 @@ export class GeminiCli implements INodeType {
 			});
 
 			// Handle process completion
-			geminiProcess.on('close', (code) => {
+			geminiProcess.on('close', async (code) => {
 				clearTimeout(timeoutId);
 				const duration = Date.now() - startTime;
+
+				// Cleanup configuration directory
+				if (configDir) {
+					await GeminiCli.cleanupGeminiConfig(configDir, options.debug);
+				}
 
 				if (code === 0) {
 					resolve({
@@ -428,20 +861,33 @@ export class GeminiCli implements INodeType {
 				}
 			});
 
-			geminiProcess.on('error', (error) => {
+			geminiProcess.on('error', async (error) => {
 				clearTimeout(timeoutId);
+				
+				// Cleanup configuration directory
+				if (configDir) {
+					await GeminiCli.cleanupGeminiConfig(configDir, options.debug);
+				}
+				
 				reject(new Error(`Failed to start Gemini CLI: ${error.message}`));
 			});
 
 			// Close stdin since we're passing the prompt as an argument
 			geminiProcess.stdin.end();
 
-			// Add user message to track what was sent
-			messages.unshift({
-				type: 'user',
-				content: finalPrompt,
-				timestamp: startTime,
-			});
+				// Add user message to track what was sent
+				messages.unshift({
+					type: 'user',
+					content: finalPrompt,
+					timestamp: startTime,
+				});
+			} catch (error) {
+				// Handle errors in configuration setup
+				if (configDir) {
+					await GeminiCli.cleanupGeminiConfig(configDir, options.debug);
+				}
+				reject(error);
+			}
 		});
 	}
 
@@ -464,6 +910,8 @@ export class GeminiCli implements INodeType {
 					systemPrompt?: string;
 					debug?: boolean;
 				};
+				const toolsConfig = this.getNodeParameter('toolsConfig', itemIndex) as ToolsConfig;
+				const mcpServers = this.getNodeParameter('mcpServers', itemIndex) as { servers: McpServer[] };
 
 				// Validate required parameters
 				if (!prompt || prompt.trim() === '') {
@@ -532,6 +980,8 @@ export class GeminiCli implements INodeType {
 					systemPrompt: additionalOptions.systemPrompt,
 					timeout,
 					debug: additionalOptions.debug,
+					toolsConfig,
+					mcpServers,
 				});
 
 				// Format output based on selected format
@@ -572,6 +1022,15 @@ export class GeminiCli implements INodeType {
 								duration_ms: response.duration_ms,
 								num_turns: Math.ceil(response.messages.length / 2),
 								success: response.success,
+							},
+							configuration: {
+								model,
+								toolsEnabled: toolsConfig?.enabledTools || [],
+								securityMode: toolsConfig?.securityMode || 'safe',
+								checkpointing: toolsConfig?.checkpointing || false,
+								mcpServersCount: mcpServers?.servers?.length || 0,
+								mcpServerNames: mcpServers?.servers?.map(s => s.name).filter(n => n) || [],
+								projectPath: resolvedProjectPath,
 							},
 							success: response.success,
 							error: response.error,
