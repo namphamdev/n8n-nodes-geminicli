@@ -1,0 +1,22 @@
+<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Google Gemini inspired icon -->
+  <rect width="60" height="60" rx="12" fill="#4285F4"/>
+  
+  <!-- Stars/sparkle elements representing AI -->
+  <g fill="white">
+    <!-- Large central star -->
+    <path d="M30 15 L32 21 L38 21 L33.5 25.5 L35.5 31.5 L30 28 L24.5 31.5 L26.5 25.5 L22 21 L28 21 Z"/>
+    
+    <!-- Small stars around -->
+    <circle cx="18" cy="18" r="2"/>
+    <circle cx="42" cy="18" r="2"/>
+    <circle cx="18" cy="42" r="2"/>
+    <circle cx="42" cy="42" r="2"/>
+    
+    <!-- Connecting lines representing intelligence -->
+    <path d="M20 20 L28 28" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <path d="M40 20 L32 28" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <path d="M20 40 L28 32" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <path d="M40 40 L32 32" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>
