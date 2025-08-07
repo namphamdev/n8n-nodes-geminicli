@@ -70,7 +70,7 @@ export class GeminiCli implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Gemini CLI',
 		name: 'geminiCli',
-		icon: 'file:gemini.svg',
+		icon: 'file:logo.svg',
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["prompt"]}}',
