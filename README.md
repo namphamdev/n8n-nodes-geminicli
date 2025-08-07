@@ -14,30 +14,39 @@ Imagine having Google's most advanced AI model analyzing your codebase, writing 
 ## 🌟 What Can You Build?
 
 ### 🔧 **Automated Code Reviews**
-Create workflows that automatically review pull requests, suggest improvements, and even fix issues before merging using Gemini's advanced code understanding.
+Create workflows that automatically review pull requests, suggest improvements, and even fix issues before merging using Gemini's advanced code understanding with file system tools.
 
 ### 🐛 **Intelligent Bug Fixing** 
-Connect error monitoring tools to Gemini CLI - automatically diagnose and fix production issues in real-time with AI-powered debugging.
+Connect error monitoring tools to Gemini CLI - automatically diagnose and fix production issues in real-time with AI-powered debugging, shell command execution, and web research capabilities.
 
 ### 📊 **Advanced Code Analysis**
-Let Gemini analyze complex codebases, suggest optimizations, and identify potential security vulnerabilities with its massive context window.
+Let Gemini analyze complex codebases, suggest optimizations, and identify potential security vulnerabilities with its massive context window and file system access.
 
 ### 🤖 **Self-Improving Workflows**
-Build n8n workflows that can modify and improve themselves using Gemini's multimodal capabilities and project understanding.
+Build n8n workflows that can modify and improve themselves using Gemini's multimodal capabilities, file system tools, and MCP server integrations.
 
 ### 📝 **Documentation Generation**
-Automatically generate and update comprehensive documentation for your codebase, APIs, and processes using Gemini's natural language skills.
+Automatically generate and update comprehensive documentation for your codebase, APIs, and processes using Gemini's natural language skills combined with file system and web search tools.
 
 ### 🔄 **Code Migration & Refactoring**
-Automate the migration of legacy codebases to modern frameworks with intelligent refactoring powered by Gemini 2.5 Pro.
+Automate the migration of legacy codebases to modern frameworks with intelligent refactoring powered by Gemini 2.5 Pro and shell command execution.
 
 ### 🎫 **Customer Support Automation**
 Transform support tickets into code fixes automatically:
-- Analyze customer bug reports with context awareness
-- Generate fixes for reported problems
+- Analyze customer bug reports with context awareness and web research
+- Generate fixes for reported problems using file system tools
+- Execute tests and validations with shell commands
 - Create comprehensive test cases
 - Update documentation based on common questions
 - Auto-respond with intelligent workarounds
+
+### 🌐 **External System Integration**
+Connect to databases, APIs, and services using MCP servers:
+- GitHub/GitLab repository management
+- Database query and manipulation
+- Cloud service integrations
+- Custom API interactions
+- Workflow orchestration with external tools
 
 ## ⚡ Quick Start
 
@@ -122,6 +131,26 @@ Transform customer complaints into deployed fixes in minutes with Gemini's probl
 ### **Interactive AI Assistance**
 Query Gemini CLI with natural language prompts and get intelligent, context-aware responses for any development task.
 
+### **Built-in Tools**
+Enable powerful capabilities:
+- 📁 **File System**: Read/write project files with intelligent context
+- 💻 **Shell Commands**: Execute system commands with safety controls
+- 🌐 **Web Fetch**: Retrieve and analyze web content
+- 🔍 **Web Search**: Search for current information and solutions
+
+### **MCP Server Integration**
+Connect to external systems via Model Context Protocol:
+- 🔗 **Database Access**: Query and manipulate databases
+- 📋 **API Integrations**: Connect to REST/GraphQL services
+- 🎛️ **Custom Tools**: Build domain-specific capabilities
+- 🔐 **Secure Connections**: Fine-grained permission controls
+
+### **Advanced Security**
+Multiple security modes for different use cases:
+- 🛡️ **Safe Mode**: Confirmation required for destructive operations
+- ⚡ **YOLO Mode**: Auto-approve for trusted environments
+- 📦 **Sandbox Mode**: Restricted environment execution
+
 ### **Multimodal Capabilities**
 Leverage Gemini's understanding of:
 - 💻 Code in multiple languages
@@ -141,13 +170,13 @@ Set a working directory and Gemini CLI understands your entire project structure
 
 ### **Flexible Output Formats**
 Choose between:
-- **Structured JSON**: Full details with metrics and metadata
-- **Raw Messages**: Complete conversation history
+- **Structured JSON**: Full details with metrics, configuration, and metadata
+- **Raw Messages**: Complete conversation history and tool interactions
 - **Plain Text**: Simple responses for easy chaining
 
 ### **Authentication Options**
 Support for both:
-- 🤖 **Gemini API**: Direct Google AI access
+- 🤖 **Gemini API**: Direct Google AI access with secure key management
 - ☁️ **Vertex AI**: Enterprise Google Cloud integration
 
 ## 📋 Configuration Examples
@@ -163,7 +192,7 @@ Support for both:
 }
 ```
 
-### Advanced Bug Fixing
+### Advanced Bug Fixing with Tools
 ```javascript
 {
   "operation": "query", 
@@ -172,32 +201,51 @@ Support for both:
   "model": "gemini-2.5-pro",
   "maxTurns": 15,
   "timeout": 600,
+  "toolsConfig": {
+    "enabledTools": ["filesystem", "shell", "web_search"],
+    "securityMode": "safe"
+  },
   "additionalOptions": {
     "systemPrompt": "Focus on security best practices and user experience"
   }
 }
 ```
 
-### Customer Support Automation
+### Customer Support with MCP Integration
 ```javascript
 {
   "operation": "query",
   "prompt": "Customer reports: 'The app crashes when uploading large files'\n\nAnalyze this issue, find the root cause, and implement a fix",
   "projectPath": "/path/to/mobile-app",
   "model": "gemini-2.5-pro",
-  "additionalOptions": {
-    "systemPrompt": "Focus on file handling, memory management, and user feedback during uploads."
+  "toolsConfig": {
+    "enabledTools": ["filesystem", "shell"],
+    "securityMode": "safe"
+  },
+  "mcpServers": {
+    "servers": [{
+      "name": "github-server",
+      "connectionType": "command",
+      "command": "npx @modelcontextprotocol/server-github",
+      "env": "GITHUB_PERSONAL_ACCESS_TOKEN=your_token",
+      "includeTools": "read_file,create_issue"
+    }]
   }
 }
 ```
 
-### Continuing Conversations
+### YOLO Mode for Trusted Operations
 ```javascript
 {
-  "operation": "continue",
-  "prompt": "Now add unit tests for the fix you just implemented",
-  "projectPath": "/path/to/your/project",
-  "model": "gemini-2.5-pro"
+  "operation": "query",
+  "prompt": "Refactor the entire user authentication system and update all related tests",
+  "projectPath": "/path/to/trusted/project",
+  "model": "gemini-2.5-pro",
+  "toolsConfig": {
+    "enabledTools": ["filesystem", "shell"],
+    "securityMode": "yolo",
+    "checkpointing": true
+  }
 }
 ```
 
@@ -254,7 +302,7 @@ gemini --version  # Should show the version
 - Provides better security by not storing keys in environment variables
 - Makes key management easier through the n8n interface
 
-Simply enter your Gemini API key in the node's configuration panel when setting up your workflow.
+Simply enter your Gemini API key in the node's **Additional Options** → **API Key** field when setting up your workflow.
 
 **Alternative Method**: Set environment variables (less secure):
 ```bash
@@ -275,14 +323,18 @@ export GOOGLE_GENAI_USE_VERTEXAI=true
    - **Prompt**: "Analyze the code in this directory and suggest improvements"
    - **Project Path**: `/path/to/your/project`
    - **Model**: Gemini 2.5 Pro (most powerful) or 2.5 Flash (faster)
-5. Click **Execute Workflow**
-6. Watch Gemini CLI analyze your project with AI precision!
+   - **Additional Options** → **API Key**: Your Gemini API key
+5. Optionally enable tools and configure MCP servers (see Advanced Configuration below)
+6. Click **Execute Workflow**
+7. Watch Gemini CLI analyze your project with AI precision!
 
 ### 4. **Explore Advanced Features**
-- Experiment with different models for speed vs. capability trade-offs
-- Use the Continue operation for complex multi-step workflows
-- Set custom system prompts for domain-specific expertise
-- Try different output formats based on your integration needs
+- **Tools & Integrations**: Enable built-in tools (file system, shell, web) and configure MCP servers
+- **Security Controls**: Choose between safe mode (confirmations) and YOLO mode (auto-approve)
+- **Models**: Experiment with different models for speed vs. capability trade-offs
+- **Conversations**: Use the Continue operation for complex multi-step workflows
+- **Customization**: Set custom system prompts for domain-specific expertise
+- **Output Formats**: Try different formats based on your integration needs
 
 ## 💡 Pro Tips
 
@@ -308,6 +360,65 @@ Use "Continue" operation to build complex multi-step workflows while maintaining
 - Use appropriate timeouts for complex tasks
 - Limit max turns for focused conversations
 - Set specific system prompts to guide AI behavior
+
+### 🛡️ **Security Best Practices**
+- Start with **Safe Mode** for production workflows
+- Use **YOLO Mode** only for trusted, non-destructive operations
+- Configure MCP servers with minimal required permissions
+- Review tool lists carefully when connecting external servers
+
+### 🔧 **Tools & MCP Configuration**
+- Enable only the tools you need to minimize security surface
+- Use **Include Tools** to whitelist specific MCP server capabilities
+- Set reasonable timeouts for external MCP server connections
+- Test MCP server configurations in safe environments first
+
+## 🛠️ Advanced Configuration
+
+### **Built-in Tools**
+Configure which tools Gemini CLI can use:
+
+#### **Tools Configuration**
+- **File System**: Enable reading/writing files in project directory
+- **Shell Commands**: Execute system commands (use with caution in Safe Mode)
+- **Web Fetch**: Retrieve content from URLs for analysis
+- **Web Search**: Search the web for current information
+
+#### **Security Modes**
+- **Safe Mode** (Recommended): Requires confirmation for destructive operations
+- **YOLO Mode**: Auto-approves all operations (use with extreme caution)
+- **Sandbox Mode**: Runs in restricted environment
+
+### **MCP Server Integration**
+
+Configure external MCP (Model Context Protocol) servers for extended functionality:
+
+#### **Connection Types**
+- **Command (stdio)**: Execute MCP server as subprocess
+- **HTTP URL**: Connect to MCP server via HTTP+SSE
+
+#### **Example GitHub Server Configuration**
+```json
+{
+  "name": "github-server",
+  "connectionType": "command",
+  "command": "npx @modelcontextprotocol/server-github",
+  "env": "GITHUB_PERSONAL_ACCESS_TOKEN=your_token",
+  "trust": false,
+  "includeTools": "read_file,list_files,create_issue"
+}
+```
+
+#### **Example HTTP MCP Server**
+```json
+{
+  "name": "api-server", 
+  "connectionType": "http",
+  "httpUrl": "http://localhost:3000/sse",
+  "timeout": 30000,
+  "excludeTools": "delete_database,format_disk"
+}
+```
 
 ## 🤝 Community & Support
 
