@@ -522,6 +522,7 @@ export class GeminiCli implements INodeType {
 	}
 
 	private static async createGeminiConfig(
+		context: IExecuteFunctions,
 		mcpServers: { servers: McpServer[] } | undefined,
 		workingDirectory: string,
 		debug: boolean = false,
@@ -538,7 +539,7 @@ export class GeminiCli implements INodeType {
 			await fs.mkdir(configDir, { recursive: true });
 		} catch (error) {
 			throw new NodeOperationError(
-				{} as any,
+				context.getNode(),
 				`Failed to create config directory: ${error instanceof Error ? error.message : 'Unknown error'}`,
 			);
 		}
@@ -618,7 +619,7 @@ export class GeminiCli implements INodeType {
 			}
 		} catch (error) {
 			throw new NodeOperationError(
-				{} as any,
+				context.getNode(),
 				`Failed to write settings file: ${error instanceof Error ? error.message : 'Unknown error'}`,
 			);
 		}
@@ -689,6 +690,7 @@ export class GeminiCli implements INodeType {
 	}
 
 	private static async runGeminiCLI(
+		context: IExecuteFunctions,
 		prompt: string,
 		options: {
 			cwd?: string;
@@ -725,6 +727,7 @@ export class GeminiCli implements INodeType {
 				const workingDirectory = options.cwd || process.cwd();
 				if (options.mcpServers?.servers && options.mcpServers.servers.length > 0) {
 					const configResult = await GeminiCli.createGeminiConfig(
+						context,
 						options.mcpServers,
 						workingDirectory,
 						options.debug,
@@ -744,7 +747,7 @@ export class GeminiCli implements INodeType {
 				if (options.toolsConfig?.securityMode) {
 					switch (options.toolsConfig.securityMode) {
 						case 'yolo':
-							args.push('--yolomode');
+							args.push('--yolo');
 							break;
 						case 'sandbox':
 							args.push('--sandbox');
@@ -769,6 +772,9 @@ export class GeminiCli implements INodeType {
 					finalPrompt = `${options.systemPrompt}\n\n${prompt}`;
 				}
 
+				// Add the prompt argument
+				args.push('-p', finalPrompt);
+
 				if (options.debug) {
 					console.log(`[GeminiCli] Starting Gemini CLI with prompt: ${finalPrompt.substring(0, 200)}...`);
 					console.log(`[GeminiCli] Working directory: ${workingDirectory}`);
@@ -779,9 +785,6 @@ export class GeminiCli implements INodeType {
 						console.log(`[GeminiCli] Config directory: ${configDir}`);
 					}
 				}
-
-				// Add the prompt as the final argument
-				args.push(finalPrompt);
 
 				// Spawn the gemini CLI process
 				const geminiProcess = spawn('gemini', args, {
@@ -972,7 +975,7 @@ export class GeminiCli implements INodeType {
 				}
 
 				// Execute Gemini CLI
-				const response = await GeminiCli.runGeminiCLI(prompt, {
+				const response = await GeminiCli.runGeminiCLI(this, prompt, {
 					cwd: resolvedProjectPath,
 					apiKey: additionalOptions.apiKey,
 					useVertexAI: additionalOptions.useVertexAI,
