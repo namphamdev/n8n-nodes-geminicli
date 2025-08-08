@@ -4,7 +4,7 @@ import type {
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { NodeConnectionType, NodeOperationError } from 'n8n-workflow';
+import { NodeConnectionType, NodeOperationError, ApplicationError } from 'n8n-workflow';
 import { spawn, execSync } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
@@ -115,16 +115,28 @@ export class GeminiCli implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
-						name: 'Query',
-						value: 'query',
-						description: 'Start a new conversation with Gemini CLI',
-						action: 'Start a new conversation with gemini cli',
+						name: 'Approve Plan',
+						value: 'approve_plan',
+						description: 'Mark a plan as approved and ready for execution',
+						action: 'Approve a plan for execution',
 					},
 					{
 						name: 'Continue',
 						value: 'continue',
 						description: 'Continue a previous conversation (requires prior query)',
 						action: 'Continue a previous conversation requires prior query',
+					},
+					{
+						name: 'Edit Plan',
+						value: 'edit_plan',
+						description: 'Modify an existing execution plan',
+						action: 'Edit an existing execution plan',
+					},
+					{
+						name: 'Execute Plan',
+						value: 'execute_plan',
+						description: 'Execute an approved plan',
+						action: 'Execute an approved execution plan',
 					},
 					{
 						name: 'Generate Plan',
@@ -139,22 +151,10 @@ export class GeminiCli implements INodeType {
 						action: 'List all stored execution plans',
 					},
 					{
-						name: 'Edit Plan',
-						value: 'edit_plan',
-						description: 'Modify an existing execution plan',
-						action: 'Edit an existing execution plan',
-					},
-					{
-						name: 'Approve Plan',
-						value: 'approve_plan',
-						description: 'Mark a plan as approved and ready for execution',
-						action: 'Approve a plan for execution',
-					},
-					{
-						name: 'Execute Plan',
-						value: 'execute_plan',
-						description: 'Execute an approved plan',
-						action: 'Execute an approved execution plan',
+						name: 'Query',
+						value: 'query',
+						description: 'Start a new conversation with Gemini CLI',
+						action: 'Start a new conversation with gemini cli',
 					},
 				],
 				default: 'query',
@@ -257,19 +257,9 @@ export class GeminiCli implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
-						name: 'Structured',
-						value: 'structured',
-						description: 'Returns a structured object with messages, summary, result, and metrics',
-					},
-					{
 						name: 'Messages',
 						value: 'messages',
 						description: 'Returns the raw array of all messages exchanged',
-					},
-					{
-						name: 'Text',
-						value: 'text',
-						description: 'Returns only the final result text',
 					},
 					{
 						name: 'Plan',
@@ -280,6 +270,16 @@ export class GeminiCli implements INodeType {
 						name: 'Plan Status',
 						value: 'plan_status',
 						description: 'Returns plan execution progress and status',
+					},
+					{
+						name: 'Structured',
+						value: 'structured',
+						description: 'Returns a structured object with messages, summary, result, and metrics',
+					},
+					{
+						name: 'Text',
+						value: 'text',
+						description: 'Returns only the final result text',
 					},
 				],
 				default: 'structured',
@@ -734,7 +734,7 @@ export class GeminiCli implements INodeType {
 			await fs.mkdir(plansDir, { recursive: true });
 			return plansDir;
 		} catch (error) {
-			throw new Error(`Failed to create plans directory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			throw new ApplicationError(`Failed to create plans directory: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
@@ -751,7 +751,7 @@ export class GeminiCli implements INodeType {
 		try {
 			await fs.writeFile(planPath, JSON.stringify(plan, null, 2), 'utf8');
 		} catch (error) {
-			throw new Error(`Failed to save plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			throw new ApplicationError(`Failed to save plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
@@ -766,7 +766,7 @@ export class GeminiCli implements INodeType {
 			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
 				return null; // Plan not found
 			}
-			throw new Error(`Failed to load plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			throw new ApplicationError(`Failed to load plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
@@ -783,7 +783,7 @@ export class GeminiCli implements INodeType {
 					const planContent = await fs.readFile(path.join(plansDir, file), 'utf8');
 					const plan = JSON.parse(planContent) as ExecutionPlan;
 					plans.push(plan);
-				} catch (error) {
+				} catch {
 					// Skip invalid plan files
 					continue;
 				}
@@ -795,7 +795,7 @@ export class GeminiCli implements INodeType {
 			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
 				return []; // Plans directory doesn't exist yet
 			}
-			throw new Error(`Failed to list plans: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			throw new ApplicationError(`Failed to list plans: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
@@ -918,7 +918,7 @@ Respond ONLY with the JSON structure described in the system prompt. Do not incl
 			});
 
 			if (!response.success) {
-				throw new Error(`Failed to generate plan: ${response.error || 'Unknown error'}`);
+				throw new ApplicationError(`Failed to generate plan: ${response.error || 'Unknown error'}`);
 			}
 
 			// Parse the response to extract plan structure
@@ -927,25 +927,25 @@ Respond ONLY with the JSON structure described in the system prompt. Do not incl
 				// Try to extract JSON from the response
 				const jsonMatch = response.result.match(/\{[\s\S]*\}/);
 				if (!jsonMatch) {
-					throw new Error('No JSON structure found in Gemini response');
+					throw new ApplicationError('No JSON structure found in Gemini response');
 				}
 				planData = JSON.parse(jsonMatch[0]);
 			} catch (parseError) {
-				throw new Error(`Failed to parse plan structure: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}`);
+				throw new ApplicationError(`Failed to parse plan structure: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}`);
 			}
 
 			// Validate and create the execution plan
 			if (!planData.title || !planData.description || !Array.isArray(planData.steps)) {
-				throw new Error('Invalid plan structure: missing required fields');
+				throw new ApplicationError('Invalid plan structure: missing required fields');
 			}
 
 			// Generate step IDs if not provided and validate steps
-			const validatedSteps: ExecutionStep[] = planData.steps.map((step: any, index: number) => ({
-				id: step.id || `step_${index + 1}`,
-				description: step.description || `Step ${index + 1}`,
-				command: step.command,
-				files: Array.isArray(step.files) ? step.files : undefined,
-				estimated_duration: typeof step.estimated_duration === 'number' ? step.estimated_duration : 300,
+			const validatedSteps: ExecutionStep[] = planData.steps.map((step: unknown, index: number) => ({
+				id: (step as Record<string, unknown>).id as string || `step_${index + 1}`,
+				description: (step as Record<string, unknown>).description as string || `Step ${index + 1}`,
+				command: (step as Record<string, unknown>).command as string,
+				files: Array.isArray((step as Record<string, unknown>).files) ? (step as Record<string, unknown>).files as string[] : undefined,
+				estimated_duration: typeof (step as Record<string, unknown>).estimated_duration === 'number' ? (step as Record<string, unknown>).estimated_duration as number : 300,
 				status: 'pending' as const,
 			}));
 
@@ -970,7 +970,7 @@ Respond ONLY with the JSON structure described in the system prompt. Do not incl
 
 			return executionPlan;
 		} catch (error) {
-			throw new Error(`Plan generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			throw new ApplicationError(`Plan generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
@@ -992,7 +992,7 @@ Respond ONLY with the JSON structure described in the system prompt. Do not incl
 		// Load the existing plan
 		const existingPlan = await GeminiCli.loadPlan(planId, workingDirectory);
 		if (!existingPlan) {
-			throw new Error(`Plan with ID ${planId} not found`);
+			throw new ApplicationError(`Plan with ID ${planId} not found`);
 		}
 
 		// Create editing-specific system prompt
@@ -1049,7 +1049,7 @@ Respond ONLY with the modified JSON structure.`;
 			});
 
 			if (!response.success) {
-				throw new Error(`Failed to edit plan: ${response.error || 'Unknown error'}`);
+				throw new ApplicationError(`Failed to edit plan: ${response.error || 'Unknown error'}`);
 			}
 
 			// Parse the response to extract modified plan structure
@@ -1057,24 +1057,24 @@ Respond ONLY with the modified JSON structure.`;
 			try {
 				const jsonMatch = response.result.match(/\{[\s\S]*\}/);
 				if (!jsonMatch) {
-					throw new Error('No JSON structure found in Gemini response');
+					throw new ApplicationError('No JSON structure found in Gemini response');
 				}
 				planData = JSON.parse(jsonMatch[0]);
 			} catch (parseError) {
-				throw new Error(`Failed to parse edited plan structure: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}`);
+				throw new ApplicationError(`Failed to parse edited plan structure: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}`);
 			}
 
 			// Validate and update the execution plan
 			if (!planData.title || !planData.description || !Array.isArray(planData.steps)) {
-				throw new Error('Invalid edited plan structure: missing required fields');
+				throw new ApplicationError('Invalid edited plan structure: missing required fields');
 			}
 
-			const validatedSteps: ExecutionStep[] = planData.steps.map((step: any, index: number) => ({
-				id: step.id || `step_${index + 1}`,
-				description: step.description || `Step ${index + 1}`,
-				command: step.command,
-				files: Array.isArray(step.files) ? step.files : undefined,
-				estimated_duration: typeof step.estimated_duration === 'number' ? step.estimated_duration : 300,
+			const validatedSteps: ExecutionStep[] = planData.steps.map((step: unknown, index: number) => ({
+				id: (step as Record<string, unknown>).id as string || `step_${index + 1}`,
+				description: (step as Record<string, unknown>).description as string || `Step ${index + 1}`,
+				command: (step as Record<string, unknown>).command as string,
+				files: Array.isArray((step as Record<string, unknown>).files) ? (step as Record<string, unknown>).files as string[] : undefined,
+				estimated_duration: typeof (step as Record<string, unknown>).estimated_duration === 'number' ? (step as Record<string, unknown>).estimated_duration as number : 300,
 				status: 'pending' as const,
 			}));
 
@@ -1092,7 +1092,7 @@ Respond ONLY with the modified JSON structure.`;
 
 			return updatedPlan;
 		} catch (error) {
-			throw new Error(`Plan editing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			throw new ApplicationError(`Plan editing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
@@ -1115,11 +1115,11 @@ Respond ONLY with the modified JSON structure.`;
 		// Load the plan
 		const plan = await GeminiCli.loadPlan(planId, workingDirectory);
 		if (!plan) {
-			throw new Error(`Plan with ID ${planId} not found`);
+			throw new ApplicationError(`Plan with ID ${planId} not found`);
 		}
 
 		if (plan.status !== 'approved') {
-			throw new Error(`Plan must be approved before execution. Current status: ${plan.status}`);
+			throw new ApplicationError(`Plan must be approved before execution. Current status: ${plan.status}`);
 		}
 
 		// Update plan status to executing
@@ -1309,7 +1309,7 @@ Complete this step thoroughly. If this involves code changes, make the actual ch
 						await GeminiCli.cleanupGeminiConfig(configDir, options.debug);
 					}
 					
-					reject(new Error(`Gemini CLI timed out after ${options.timeout || 300} seconds`));
+					reject(new ApplicationError(`Gemini CLI timed out after ${options.timeout || 300} seconds`));
 				}, (options.timeout || 300) * 1000);
 
 			// Handle stdout (main response)
@@ -1379,7 +1379,7 @@ Complete this step thoroughly. If this involves code changes, make the actual ch
 					await GeminiCli.cleanupGeminiConfig(configDir, options.debug);
 				}
 				
-				reject(new Error(`Failed to start Gemini CLI: ${error.message}`));
+				reject(new ApplicationError(`Failed to start Gemini CLI: ${error.message}`));
 			});
 
 			// Close stdin since we're passing the prompt as an argument
