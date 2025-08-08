@@ -30,6 +30,32 @@ interface GeminiResponse {
 	error?: string;
 }
 
+interface ExecutionStep {
+	id: string;
+	description: string;
+	command?: string;
+	files?: string[];
+	estimated_duration?: number;
+	status?: 'pending' | 'in_progress' | 'completed' | 'failed';
+}
+
+interface ExecutionPlan {
+	id: string;
+	title: string;
+	description: string;
+	steps: ExecutionStep[];
+	created_at: number;
+	modified_at: number;
+	status: 'draft' | 'approved' | 'executing' | 'completed' | 'failed';
+	original_prompt?: string;
+	configuration?: {
+		model?: string;
+		projectPath?: string;
+		toolsConfig?: ToolsConfig;
+	};
+}
+
+
 interface McpServer {
 	name: string;
 	connectionType: 'command' | 'http';
@@ -100,6 +126,36 @@ export class GeminiCli implements INodeType {
 						description: 'Continue a previous conversation (requires prior query)',
 						action: 'Continue a previous conversation requires prior query',
 					},
+					{
+						name: 'Generate Plan',
+						value: 'generate_plan',
+						description: 'Generate an execution plan without executing it',
+						action: 'Generate an execution plan for the given task',
+					},
+					{
+						name: 'List Plans',
+						value: 'list_plans',
+						description: 'List all available execution plans',
+						action: 'List all stored execution plans',
+					},
+					{
+						name: 'Edit Plan',
+						value: 'edit_plan',
+						description: 'Modify an existing execution plan',
+						action: 'Edit an existing execution plan',
+					},
+					{
+						name: 'Approve Plan',
+						value: 'approve_plan',
+						description: 'Mark a plan as approved and ready for execution',
+						action: 'Approve a plan for execution',
+					},
+					{
+						name: 'Execute Plan',
+						value: 'execute_plan',
+						description: 'Execute an approved plan',
+						action: 'Execute an approved execution plan',
+					},
 				],
 				default: 'query',
 			},
@@ -115,6 +171,41 @@ export class GeminiCli implements INodeType {
 				required: true,
 				placeholder: 'e.g., "Create a Python function to parse CSV files"',
 				hint: 'Use expressions like {{$json.prompt}} to use data from previous nodes',
+				displayOptions: {
+					show: {
+						operation: ['query', 'continue', 'generate_plan'],
+					},
+				},
+			},
+			{
+				displayName: 'Plan ID',
+				name: 'planId',
+				type: 'string',
+				default: '',
+				description: 'The ID of the plan to work with',
+				required: true,
+				placeholder: 'e.g., "plan_20240108_123456"',
+				displayOptions: {
+					show: {
+						operation: ['edit_plan', 'approve_plan', 'execute_plan'],
+					},
+				},
+			},
+			{
+				displayName: 'Edit Instructions',
+				name: 'editInstructions',
+				type: 'string',
+				typeOptions: {
+					rows: 3,
+				},
+				default: '',
+				description: 'Instructions for how to modify the plan',
+				placeholder: 'e.g., "Add error handling to step 2 and increase timeout for step 4"',
+				displayOptions: {
+					show: {
+						operation: ['edit_plan'],
+					},
+				},
 			},
 			{
 				displayName: 'Model',
@@ -179,6 +270,16 @@ export class GeminiCli implements INodeType {
 						name: 'Text',
 						value: 'text',
 						description: 'Returns only the final result text',
+					},
+					{
+						name: 'Plan',
+						value: 'plan',
+						description: 'Returns the execution plan structure (for plan operations)',
+					},
+					{
+						name: 'Plan Status',
+						value: 'plan_status',
+						description: 'Returns plan execution progress and status',
 					},
 				],
 				default: 'structured',
@@ -627,6 +728,78 @@ export class GeminiCli implements INodeType {
 		return { configDir, settingsPath };
 	}
 
+	private static async ensurePlansDirectory(workingDirectory: string): Promise<string> {
+		const plansDir = path.join(workingDirectory, '.gemini', 'plans');
+		try {
+			await fs.mkdir(plansDir, { recursive: true });
+			return plansDir;
+		} catch (error) {
+			throw new Error(`Failed to create plans directory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
+	}
+
+	private static generatePlanId(): string {
+		const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, -5);
+		const randomSuffix = Math.random().toString(36).substring(2, 8);
+		return `plan_${timestamp}_${randomSuffix}`;
+	}
+
+	private static async savePlan(plan: ExecutionPlan, workingDirectory: string): Promise<void> {
+		const plansDir = await GeminiCli.ensurePlansDirectory(workingDirectory);
+		const planPath = path.join(plansDir, `${plan.id}.json`);
+		
+		try {
+			await fs.writeFile(planPath, JSON.stringify(plan, null, 2), 'utf8');
+		} catch (error) {
+			throw new Error(`Failed to save plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
+	}
+
+	private static async loadPlan(planId: string, workingDirectory: string): Promise<ExecutionPlan | null> {
+		const plansDir = path.join(workingDirectory, '.gemini', 'plans');
+		const planPath = path.join(plansDir, `${planId}.json`);
+		
+		try {
+			const planContent = await fs.readFile(planPath, 'utf8');
+			return JSON.parse(planContent) as ExecutionPlan;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+				return null; // Plan not found
+			}
+			throw new Error(`Failed to load plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
+	}
+
+	private static async listPlans(workingDirectory: string): Promise<ExecutionPlan[]> {
+		const plansDir = path.join(workingDirectory, '.gemini', 'plans');
+		const plans: ExecutionPlan[] = [];
+		
+		try {
+			const files = await fs.readdir(plansDir);
+			const planFiles = files.filter(file => file.endsWith('.json'));
+			
+			for (const file of planFiles) {
+				try {
+					const planContent = await fs.readFile(path.join(plansDir, file), 'utf8');
+					const plan = JSON.parse(planContent) as ExecutionPlan;
+					plans.push(plan);
+				} catch (error) {
+					// Skip invalid plan files
+					continue;
+				}
+			}
+			
+			// Sort by creation date, newest first
+			return plans.sort((a, b) => b.created_at - a.created_at);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+				return []; // Plans directory doesn't exist yet
+			}
+			throw new Error(`Failed to list plans: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
+	}
+
+
 	private static async cleanupGeminiConfig(configDir: string, debug: boolean = false): Promise<void> {
 		try {
 			if (debug) {
@@ -686,6 +859,340 @@ export class GeminiCli implements INodeType {
 		} catch (err) {
 			result.error = `Unexpected error validating project path: ${err instanceof Error ? err.message : 'Unknown error'}`;
 			return result;
+		}
+	}
+
+	private static async generatePlanWithGemini(
+		context: IExecuteFunctions,
+		prompt: string,
+		options: {
+			cwd?: string;
+			apiKey?: string;
+			useVertexAI?: boolean;
+			model?: string;
+			systemPrompt?: string;
+			timeout?: number;
+			debug?: boolean;
+			toolsConfig?: ToolsConfig;
+			mcpServers?: { servers: McpServer[] };
+		},
+	): Promise<ExecutionPlan> {
+		const planId = GeminiCli.generatePlanId();
+		const timestamp = Date.now();
+		
+		// Create a planning-specific system prompt
+		const planningSystemPrompt = `You are an AI assistant that creates detailed execution plans. 
+When given a task, you must respond with a structured execution plan in the following JSON format:
+
+{
+  "title": "Brief title for the task",
+  "description": "Detailed description of what needs to be accomplished",
+  "steps": [
+    {
+      "id": "step_1", 
+      "description": "Clear description of what this step does",
+      "command": "optional: specific command to run",
+      "files": ["optional: array of files this step will work with"],
+      "estimated_duration": 300
+    }
+  ]
+}
+
+Break down complex tasks into specific, actionable steps. Each step should be clear and executable.
+Do not execute anything - only create the plan. Include estimated duration in seconds for each step.
+Be specific about files that will be created, modified, or analyzed.
+
+${options.systemPrompt ? `\n\nAdditional context: ${options.systemPrompt}` : ''}`;
+
+		const planningPrompt = `Create an execution plan for the following task:
+
+${prompt}
+
+Respond ONLY with the JSON structure described in the system prompt. Do not include any other text, explanations, or markdown formatting.`;
+
+		try {
+			// Call Gemini CLI to generate the plan
+			const response = await GeminiCli.runGeminiCLI(context, planningPrompt, {
+				...options,
+				systemPrompt: planningSystemPrompt,
+			});
+
+			if (!response.success) {
+				throw new Error(`Failed to generate plan: ${response.error || 'Unknown error'}`);
+			}
+
+			// Parse the response to extract plan structure
+			let planData;
+			try {
+				// Try to extract JSON from the response
+				const jsonMatch = response.result.match(/\{[\s\S]*\}/);
+				if (!jsonMatch) {
+					throw new Error('No JSON structure found in Gemini response');
+				}
+				planData = JSON.parse(jsonMatch[0]);
+			} catch (parseError) {
+				throw new Error(`Failed to parse plan structure: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}`);
+			}
+
+			// Validate and create the execution plan
+			if (!planData.title || !planData.description || !Array.isArray(planData.steps)) {
+				throw new Error('Invalid plan structure: missing required fields');
+			}
+
+			// Generate step IDs if not provided and validate steps
+			const validatedSteps: ExecutionStep[] = planData.steps.map((step: any, index: number) => ({
+				id: step.id || `step_${index + 1}`,
+				description: step.description || `Step ${index + 1}`,
+				command: step.command,
+				files: Array.isArray(step.files) ? step.files : undefined,
+				estimated_duration: typeof step.estimated_duration === 'number' ? step.estimated_duration : 300,
+				status: 'pending' as const,
+			}));
+
+			const executionPlan: ExecutionPlan = {
+				id: planId,
+				title: planData.title,
+				description: planData.description,
+				steps: validatedSteps,
+				created_at: timestamp,
+				modified_at: timestamp,
+				status: 'draft',
+				original_prompt: prompt,
+				configuration: {
+					model: options.model,
+					projectPath: options.cwd,
+					toolsConfig: options.toolsConfig,
+				},
+			};
+
+			// Save the plan
+			await GeminiCli.savePlan(executionPlan, options.cwd || process.cwd());
+
+			return executionPlan;
+		} catch (error) {
+			throw new Error(`Plan generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
+	}
+
+	private static async editPlanWithGemini(
+		context: IExecuteFunctions,
+		planId: string,
+		editInstructions: string,
+		options: {
+			cwd?: string;
+			apiKey?: string;
+			useVertexAI?: boolean;
+			model?: string;
+			timeout?: number;
+			debug?: boolean;
+		},
+	): Promise<ExecutionPlan> {
+		const workingDirectory = options.cwd || process.cwd();
+		
+		// Load the existing plan
+		const existingPlan = await GeminiCli.loadPlan(planId, workingDirectory);
+		if (!existingPlan) {
+			throw new Error(`Plan with ID ${planId} not found`);
+		}
+
+		// Create editing-specific system prompt
+		const editingSystemPrompt = `You are an AI assistant that modifies execution plans based on user instructions.
+
+You will receive:
+1. An existing execution plan in JSON format
+2. Instructions for how to modify the plan
+
+You must respond with the modified plan in the same JSON format:
+
+{
+  "title": "Brief title for the task",
+  "description": "Detailed description of what needs to be accomplished", 
+  "steps": [
+    {
+      "id": "step_1",
+      "description": "Clear description of what this step does",
+      "command": "optional: specific command to run",
+      "files": ["optional: array of files this step will work with"],
+      "estimated_duration": 300
+    }
+  ]
+}
+
+Modify only what is requested in the instructions. Keep the existing structure and IDs where possible.
+Respond ONLY with the JSON structure. Do not include any other text or explanations.`;
+
+		const editingPrompt = `Here is the existing execution plan:
+
+${JSON.stringify({
+	title: existingPlan.title,
+	description: existingPlan.description,
+	steps: existingPlan.steps.map(step => ({
+		id: step.id,
+		description: step.description,
+		command: step.command,
+		files: step.files,
+		estimated_duration: step.estimated_duration,
+	})),
+}, null, 2)}
+
+Please modify this plan according to these instructions:
+
+${editInstructions}
+
+Respond ONLY with the modified JSON structure.`;
+
+		try {
+			// Call Gemini CLI to edit the plan
+			const response = await GeminiCli.runGeminiCLI(context, editingPrompt, {
+				...options,
+				systemPrompt: editingSystemPrompt,
+			});
+
+			if (!response.success) {
+				throw new Error(`Failed to edit plan: ${response.error || 'Unknown error'}`);
+			}
+
+			// Parse the response to extract modified plan structure
+			let planData;
+			try {
+				const jsonMatch = response.result.match(/\{[\s\S]*\}/);
+				if (!jsonMatch) {
+					throw new Error('No JSON structure found in Gemini response');
+				}
+				planData = JSON.parse(jsonMatch[0]);
+			} catch (parseError) {
+				throw new Error(`Failed to parse edited plan structure: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}`);
+			}
+
+			// Validate and update the execution plan
+			if (!planData.title || !planData.description || !Array.isArray(planData.steps)) {
+				throw new Error('Invalid edited plan structure: missing required fields');
+			}
+
+			const validatedSteps: ExecutionStep[] = planData.steps.map((step: any, index: number) => ({
+				id: step.id || `step_${index + 1}`,
+				description: step.description || `Step ${index + 1}`,
+				command: step.command,
+				files: Array.isArray(step.files) ? step.files : undefined,
+				estimated_duration: typeof step.estimated_duration === 'number' ? step.estimated_duration : 300,
+				status: 'pending' as const,
+			}));
+
+			const updatedPlan: ExecutionPlan = {
+				...existingPlan,
+				title: planData.title,
+				description: planData.description,
+				steps: validatedSteps,
+				modified_at: Date.now(),
+				status: 'draft', // Reset to draft after editing
+			};
+
+			// Save the updated plan
+			await GeminiCli.savePlan(updatedPlan, workingDirectory);
+
+			return updatedPlan;
+		} catch (error) {
+			throw new Error(`Plan editing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
+	}
+
+	private static async executePlan(
+		context: IExecuteFunctions,
+		planId: string,
+		options: {
+			cwd?: string;
+			apiKey?: string;
+			useVertexAI?: boolean;
+			model?: string;
+			timeout?: number;
+			debug?: boolean;
+			toolsConfig?: ToolsConfig;
+			mcpServers?: { servers: McpServer[] };
+		},
+	): Promise<{ plan: ExecutionPlan; results: GeminiResponse[] }> {
+		const workingDirectory = options.cwd || process.cwd();
+		
+		// Load the plan
+		const plan = await GeminiCli.loadPlan(planId, workingDirectory);
+		if (!plan) {
+			throw new Error(`Plan with ID ${planId} not found`);
+		}
+
+		if (plan.status !== 'approved') {
+			throw new Error(`Plan must be approved before execution. Current status: ${plan.status}`);
+		}
+
+		// Update plan status to executing
+		plan.status = 'executing';
+		plan.modified_at = Date.now();
+		await GeminiCli.savePlan(plan, workingDirectory);
+
+		const results: GeminiResponse[] = [];
+		let allStepsSuccessful = true;
+
+		try {
+			// Execute each step sequentially
+			for (const step of plan.steps) {
+				if (options.debug) {
+					console.log(`[GeminiCli] Executing step: ${step.id} - ${step.description}`);
+				}
+
+				// Update step status
+				step.status = 'in_progress';
+				await GeminiCli.savePlan(plan, workingDirectory);
+
+				// Create execution prompt for this step
+				const executionPrompt = `Execute the following step from an approved plan:
+
+Step Description: ${step.description}
+${step.command ? `Suggested Command: ${step.command}` : ''}
+${step.files ? `Files to work with: ${step.files.join(', ')}` : ''}
+
+Complete this step thoroughly. If this involves code changes, make the actual changes. If it involves analysis, provide detailed analysis.`;
+
+				try {
+					// Execute the step
+					const stepResult = await GeminiCli.runGeminiCLI(context, executionPrompt, options);
+					results.push(stepResult);
+
+					if (stepResult.success) {
+						step.status = 'completed';
+						if (options.debug) {
+							console.log(`[GeminiCli] Step ${step.id} completed successfully`);
+						}
+					} else {
+						step.status = 'failed';
+						allStepsSuccessful = false;
+						if (options.debug) {
+							console.log(`[GeminiCli] Step ${step.id} failed: ${stepResult.error}`);
+						}
+						break; // Stop execution on first failure
+					}
+				} catch (stepError) {
+					step.status = 'failed';
+					allStepsSuccessful = false;
+					if (options.debug) {
+						console.error(`[GeminiCli] Step ${step.id} error: ${stepError}`);
+					}
+					break;
+				}
+
+				// Save progress after each step
+				await GeminiCli.savePlan(plan, workingDirectory);
+			}
+
+			// Update final plan status
+			plan.status = allStepsSuccessful ? 'completed' : 'failed';
+			plan.modified_at = Date.now();
+			await GeminiCli.savePlan(plan, workingDirectory);
+
+			return { plan, results };
+		} catch (error) {
+			// Mark plan as failed on any error
+			plan.status = 'failed';
+			plan.modified_at = Date.now();
+			await GeminiCli.savePlan(plan, workingDirectory);
+			throw error;
 		}
 	}
 
@@ -901,7 +1408,6 @@ export class GeminiCli implements INodeType {
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
 				const operation = this.getNodeParameter('operation', itemIndex) as string;
-				const prompt = this.getNodeParameter('prompt', itemIndex) as string;
 				const model = this.getNodeParameter('model', itemIndex) as string;
 				const maxTurns = this.getNodeParameter('maxTurns', itemIndex) as number;
 				const timeout = this.getNodeParameter('timeout', itemIndex) as number;
@@ -916,9 +1422,26 @@ export class GeminiCli implements INodeType {
 				const toolsConfig = this.getNodeParameter('toolsConfig', itemIndex) as ToolsConfig;
 				const mcpServers = this.getNodeParameter('mcpServers', itemIndex) as { servers: McpServer[] };
 
-				// Validate required parameters
-				if (!prompt || prompt.trim() === '') {
+				// Get operation-specific parameters
+				const prompt = ['query', 'continue', 'generate_plan'].includes(operation)
+					? this.getNodeParameter('prompt', itemIndex) as string
+					: '';
+				const planId = ['edit_plan', 'approve_plan', 'execute_plan'].includes(operation)
+					? this.getNodeParameter('planId', itemIndex) as string
+					: '';
+				const editInstructions = operation === 'edit_plan'
+					? this.getNodeParameter('editInstructions', itemIndex) as string
+					: '';
+
+				// Validate required parameters based on operation
+				if (['query', 'continue', 'generate_plan'].includes(operation) && (!prompt || prompt.trim() === '')) {
 					throw new NodeOperationError(this.getNode(), 'Prompt is required and cannot be empty', {
+						itemIndex,
+					});
+				}
+
+				if (['edit_plan', 'approve_plan', 'execute_plan'].includes(operation) && (!planId || planId.trim() === '')) {
+					throw new NodeOperationError(this.getNode(), 'Plan ID is required for this operation', {
 						itemIndex,
 					});
 				}
@@ -974,8 +1497,13 @@ export class GeminiCli implements INodeType {
 					console.log(`[GeminiCli] ========================================`);
 				}
 
-				// Execute Gemini CLI
-				const response = await GeminiCli.runGeminiCLI(this, prompt, {
+				// Execute operation based on type
+				let response: GeminiResponse | undefined;
+				let plan: ExecutionPlan | undefined;
+				let plans: ExecutionPlan[] | undefined;
+				let executionResults: { plan: ExecutionPlan; results: GeminiResponse[] } | undefined;
+
+				const operationOptions = {
 					cwd: resolvedProjectPath,
 					apiKey: additionalOptions.apiKey,
 					useVertexAI: additionalOptions.useVertexAI,
@@ -985,67 +1513,195 @@ export class GeminiCli implements INodeType {
 					debug: additionalOptions.debug,
 					toolsConfig,
 					mcpServers,
-				});
+				};
 
-				// Format output based on selected format
-				if (outputFormat === 'text') {
-					returnData.push({
-						json: {
-							result: response.result,
-							success: response.success,
-							duration_ms: response.duration_ms,
-							error: response.error,
-						},
-						pairedItem: itemIndex,
-					});
-				} else if (outputFormat === 'messages') {
-					returnData.push({
-						json: {
-							messages: response.messages,
-							messageCount: response.messages.length,
-						},
-						pairedItem: itemIndex,
-					});
-				} else if (outputFormat === 'structured') {
-					const userMessages = response.messages.filter((m) => m.type === 'user');
-					const assistantMessages = response.messages.filter((m) => m.type === 'assistant');
-					const errorMessages = response.messages.filter((m) => m.type === 'error');
+				switch (operation) {
+					case 'query':
+					case 'continue':
+						// Execute traditional Gemini CLI operations
+						response = await GeminiCli.runGeminiCLI(this, prompt, operationOptions);
+						break;
 
-					returnData.push({
-						json: {
-							messages: response.messages,
-							summary: {
-								userMessageCount: userMessages.length,
-								assistantMessageCount: assistantMessages.length,
-								errorMessageCount: errorMessages.length,
-								hasResult: !!response.result,
-							},
-							result: response.result,
-							metrics: {
-								duration_ms: response.duration_ms,
-								num_turns: Math.ceil(response.messages.length / 2),
+					case 'generate_plan':
+						// Generate a new execution plan
+						plan = await GeminiCli.generatePlanWithGemini(this, prompt, operationOptions);
+						break;
+
+					case 'list_plans':
+						// List all available plans
+						plans = await GeminiCli.listPlans(resolvedProjectPath || process.cwd());
+						break;
+
+					case 'edit_plan':
+						// Edit an existing plan
+						plan = await GeminiCli.editPlanWithGemini(this, planId, editInstructions, operationOptions);
+						break;
+
+					case 'approve_plan':
+						// Approve a plan for execution
+						const planToApprove = await GeminiCli.loadPlan(planId, resolvedProjectPath || process.cwd());
+						if (!planToApprove) {
+							throw new NodeOperationError(this.getNode(), `Plan with ID ${planId} not found`, {
+								itemIndex,
+							});
+						}
+						planToApprove.status = 'approved';
+						planToApprove.modified_at = Date.now();
+						await GeminiCli.savePlan(planToApprove, resolvedProjectPath || process.cwd());
+						plan = planToApprove;
+						break;
+
+					case 'execute_plan':
+						// Execute an approved plan
+						executionResults = await GeminiCli.executePlan(this, planId, operationOptions);
+						break;
+
+					default:
+						throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
+							itemIndex,
+						});
+				}
+
+				// Format output based on selected format and operation
+				// Format output based on operation type and selected format
+				if (response) {
+					// Handle traditional Gemini CLI operations (query, continue)
+					if (outputFormat === 'text') {
+						returnData.push({
+							json: {
+								result: response.result,
 								success: response.success,
+								duration_ms: response.duration_ms,
+								error: response.error,
 							},
-							configuration: {
-								model,
-								toolsEnabled: toolsConfig?.enabledTools || [],
-								securityMode: toolsConfig?.securityMode || 'safe',
-								checkpointing: toolsConfig?.checkpointing || false,
-								mcpServersCount: mcpServers?.servers?.length || 0,
-								mcpServerNames: mcpServers?.servers?.map(s => s.name).filter(n => n) || [],
-								projectPath: resolvedProjectPath,
+							pairedItem: itemIndex,
+						});
+					} else if (outputFormat === 'messages') {
+						returnData.push({
+							json: {
+								messages: response.messages,
+								messageCount: response.messages.length,
 							},
-							success: response.success,
-							error: response.error,
+							pairedItem: itemIndex,
+						});
+					} else if (outputFormat === 'structured') {
+						const userMessages = response.messages.filter((m) => m.type === 'user');
+						const assistantMessages = response.messages.filter((m) => m.type === 'assistant');
+						const errorMessages = response.messages.filter((m) => m.type === 'error');
+
+						returnData.push({
+							json: {
+								messages: response.messages,
+								summary: {
+									userMessageCount: userMessages.length,
+									assistantMessageCount: assistantMessages.length,
+									errorMessageCount: errorMessages.length,
+									hasResult: !!response.result,
+								},
+								result: response.result,
+								metrics: {
+									duration_ms: response.duration_ms,
+									num_turns: Math.ceil(response.messages.length / 2),
+									success: response.success,
+								},
+								configuration: {
+									model,
+									toolsEnabled: toolsConfig?.enabledTools || [],
+									securityMode: toolsConfig?.securityMode || 'safe',
+									checkpointing: toolsConfig?.checkpointing || false,
+									mcpServersCount: mcpServers?.servers?.length || 0,
+									mcpServerNames: mcpServers?.servers?.map(s => s.name).filter(n => n) || [],
+									projectPath: resolvedProjectPath,
+								},
+								success: response.success,
+								error: response.error,
+							},
+							pairedItem: itemIndex,
+						});
+					}
+				} else if (plan) {
+					// Handle plan operations (generate_plan, edit_plan, approve_plan)
+					if (outputFormat === 'plan' || outputFormat === 'structured') {
+						returnData.push({
+							json: {
+								plan,
+								operation,
+								success: true,
+							},
+							pairedItem: itemIndex,
+						});
+					} else {
+						returnData.push({
+							json: {
+								planId: plan.id,
+								title: plan.title,
+								status: plan.status,
+								stepCount: plan.steps.length,
+								operation,
+								success: true,
+							},
+							pairedItem: itemIndex,
+						});
+					}
+				} else if (plans) {
+					// Handle list_plans operation
+					returnData.push({
+						json: {
+							plans: outputFormat === 'plan' ? plans : plans.map(p => ({
+								id: p.id,
+								title: p.title,
+								status: p.status,
+								stepCount: p.steps.length,
+								created_at: p.created_at,
+								modified_at: p.modified_at,
+							})),
+							planCount: plans.length,
+							operation,
+							success: true,
 						},
 						pairedItem: itemIndex,
 					});
+				} else if (executionResults) {
+					// Handle execute_plan operation
+					if (outputFormat === 'plan_status' || outputFormat === 'structured') {
+						returnData.push({
+							json: {
+								plan: executionResults.plan,
+								executionResults: executionResults.results,
+								summary: {
+									totalSteps: executionResults.plan.steps.length,
+									completedSteps: executionResults.plan.steps.filter(s => s.status === 'completed').length,
+									failedSteps: executionResults.plan.steps.filter(s => s.status === 'failed').length,
+									finalStatus: executionResults.plan.status,
+								},
+								operation,
+								success: executionResults.plan.status === 'completed',
+							},
+							pairedItem: itemIndex,
+						});
+					} else {
+						returnData.push({
+							json: {
+								planId: executionResults.plan.id,
+								status: executionResults.plan.status,
+								completedSteps: executionResults.plan.steps.filter(s => s.status === 'completed').length,
+								totalSteps: executionResults.plan.steps.length,
+								operation,
+								success: executionResults.plan.status === 'completed',
+							},
+							pairedItem: itemIndex,
+						});
+					}
 				}
 
 				if (additionalOptions.debug) {
-					console.log(
-						`[GeminiCli] Execution completed in ${response.duration_ms}ms with ${response.messages.length} messages`,
-					);
+					if (response) {
+						console.log(
+							`[GeminiCli] Execution completed in ${response.duration_ms}ms with ${response.messages.length} messages`,
+						);
+					} else {
+						console.log(`[GeminiCli] ${operation} operation completed successfully`);
+					}
 				}
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';

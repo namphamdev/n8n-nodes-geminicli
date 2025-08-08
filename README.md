@@ -48,6 +48,47 @@ Connect to databases, APIs, and services using MCP servers:
 - Custom API interactions
 - Workflow orchestration with external tools
 
+## 🧠 Planning Mode (NEW!)
+
+**Revolutionary AI Planning Workflow**: Instead of immediate execution, you can now generate, edit, and approve detailed execution plans before running them. This provides unprecedented control and collaboration capabilities.
+
+### Planning Workflow:
+1. **Generate Plan**: AI creates detailed step-by-step execution plan
+2. **Review & Edit**: Modify the plan using natural language instructions  
+3. **Approve**: Mark the plan as ready for execution
+4. **Execute**: Run the approved plan with progress tracking
+
+### Example Planning Operations:
+```javascript
+// Generate a plan
+{
+  "operation": "generate_plan",
+  "prompt": "Create a secure user authentication system with JWT tokens",
+  "outputFormat": "plan"
+}
+
+// Edit the plan
+{
+  "operation": "edit_plan", 
+  "planId": "plan_2024-01-08_abc123",
+  "editInstructions": "Add rate limiting and password encryption"
+}
+
+// Execute approved plan
+{
+  "operation": "execute_plan",
+  "planId": "plan_2024-01-08_abc123",
+  "outputFormat": "plan_status"
+}
+```
+
+**Benefits**:
+- ✅ Review before execution - see exactly what AI will do
+- ✅ Team collaboration - share and discuss plans
+- ✅ Iterative refinement - edit plans until perfect
+- ✅ Risk reduction - avoid unexpected changes
+- ✅ Progress tracking - monitor execution step-by-step
+
 ## ⚡ Quick Start
 
 ### Prerequisites
@@ -315,6 +356,8 @@ export GOOGLE_GENAI_USE_VERTEXAI=true
 ```
 
 ### 3. **Create Your First Workflow**
+
+**Traditional Execution:**
 1. In n8n, create a new workflow
 2. Add a **Manual Trigger** node (for testing)
 3. Add the **Gemini CLI** node
@@ -327,6 +370,15 @@ export GOOGLE_GENAI_USE_VERTEXAI=true
 5. Optionally enable tools and configure MCP servers (see Advanced Configuration below)
 6. Click **Execute Workflow**
 7. Watch Gemini CLI analyze your project with AI precision!
+
+**Planning Mode Workflow:**
+1. Create a workflow with multiple **Gemini CLI** nodes:
+   - **Node 1**: Operation = "Generate Plan", Prompt = "Create a user authentication system"
+   - **Node 2**: Operation = "Edit Plan" (optional), Plan ID from previous node
+   - **Node 3**: Operation = "Approve Plan", Plan ID from previous node  
+   - **Node 4**: Operation = "Execute Plan", Plan ID from previous node
+2. Each step gives you full control over the AI's actions
+3. Review, modify, and approve before any actual execution
 
 ### 4. **Explore Advanced Features**
 - **Tools & Integrations**: Enable built-in tools (file system, shell, web) and configure MCP servers
