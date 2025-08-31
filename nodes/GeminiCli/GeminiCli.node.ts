@@ -62,6 +62,7 @@ interface McpServer {
 	command?: string;
 	args?: string;
 	httpUrl?: string;
+	headers?: string;
 	env?: string;
 	cwd?: string;
 	timeout: number;
@@ -80,6 +81,7 @@ interface GeminiServerConfig {
 	command?: string;
 	args?: string[];
 	url?: string;
+	headers?: Record<string, string>;
 	env?: Record<string, string>;
 	cwd?: string;
 	timeout?: number;
@@ -494,6 +496,22 @@ export class GeminiCli implements INodeType {
 								},
 							},
 							{
+								displayName: 'Headers for HTTP',
+								name: 'headers',
+								type: 'string',
+								default: '',
+								description: 'Custom headers for HTTP requests',
+								typeOptions: {
+									rows: 3,
+								},
+								placeholder: 'Authorization=Bearer ghp_abc',
+								displayOptions: {
+									show: {
+										connectionType: ['http'],
+									},
+								},
+							},
+							{
 								displayName: 'Include Tools',
 								name: 'includeTools',
 								type: 'string',
@@ -687,6 +705,20 @@ export class GeminiCli implements INodeType {
 							const [key, ...valueParts] = trimmed.split('=');
 							const value = valueParts.join('=');
 							serverConfig.env[key.trim()] = value.trim();
+						}
+					}
+				}
+
+				// Parse custom headers
+				if (server.headers && server.headers.trim()) {
+					serverConfig.headers = {};
+					const headerLines = server.headers.split('\n');
+					for (const line of headerLines) {
+						const trimmed = line.trim();
+						if (trimmed && trimmed.includes('=')) {
+							const [key, ...valueParts] = trimmed.split('=');
+							const value = valueParts.join('=');
+							serverConfig.headers[key.trim()] = value.trim();
 						}
 					}
 				}
