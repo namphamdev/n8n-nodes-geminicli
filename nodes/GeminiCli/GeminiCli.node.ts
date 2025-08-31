@@ -80,7 +80,7 @@ interface ToolsConfig {
 interface GeminiServerConfig {
 	command?: string;
 	args?: string[];
-	url?: string;
+	httpUrl?: string;
 	headers?: Record<string, string>;
 	env?: Record<string, string>;
 	cwd?: string;
@@ -692,7 +692,7 @@ export class GeminiCli implements INodeType {
 						serverConfig.cwd = server.cwd.trim();
 					}
 				} else if (server.connectionType === 'http' && server.httpUrl) {
-					serverConfig.url = server.httpUrl;
+					serverConfig.httpUrl = server.httpUrl;
 				}
 
 				// Parse environment variables
