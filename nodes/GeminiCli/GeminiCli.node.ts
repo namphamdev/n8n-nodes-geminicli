@@ -483,19 +483,6 @@ export class GeminiCli implements INodeType {
 								placeholder: 'delete_file,format_disk',
 							},
 							{
-								displayName: 'HTTP URL',
-								name: 'httpUrl',
-								type: 'string',
-								default: '',
-								description: 'HTTP URL for the MCP server',
-								placeholder: 'http://localhost:3000/sse',
-								displayOptions: {
-									show: {
-										connectionType: ['http'],
-									},
-								},
-							},
-							{
 								displayName: 'Headers for HTTP',
 								name: 'headers',
 								type: 'string',
@@ -505,6 +492,19 @@ export class GeminiCli implements INodeType {
 									rows: 3,
 								},
 								placeholder: 'Authorization=Bearer ghp_abc',
+								displayOptions: {
+									show: {
+										connectionType: ['http'],
+									},
+								},
+							},
+							{
+								displayName: 'HTTP URL',
+								name: 'httpUrl',
+								type: 'string',
+								default: '',
+								description: 'HTTP URL for the MCP server',
+								placeholder: 'http://localhost:3000/sse',
 								displayOptions: {
 									show: {
 										connectionType: ['http'],
